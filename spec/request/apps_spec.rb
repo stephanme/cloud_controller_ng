@@ -561,6 +561,43 @@ RSpec.describe 'Apps' do
       end
     end
 
+    context 'filtering by stage' do
+      let!(:resource_1) { VCAP::CloudController::AppModel.create(name: '1', space: space) }
+      let!(:resource_2) { VCAP::CloudController::AppModel.create(name: '2', space: space) }
+      let!(:resource_3) { VCAP::CloudController::AppModel.create(name: '3', space: space) }
+      let!(:resource_4) { VCAP::CloudController::AppModel.create(name: '4', space: space) }
+
+      after do
+        VCAP::CloudController::AppModel.plugin :timestamps, update_on_create: true
+        allow(resource_1).to receive(:current_state).and_return("RUNNING")
+        allow(resource_2).to receive(:current_state).and_return("CRASHED")
+        allow(resource_3).to receive(:current_state).and_return("RUNNING")
+        allow(resource_4).to receive(:current_state).and_return("STOPPED")
+      end
+
+      it 'filters by crashed state' do
+        get "/v3/apps?current_state=CRASHED", nil, admin_header
+
+        expect(last_response).to have_status_code(200)
+        expect(parsed_response['resources'].map { |r| r['guid'] }).to contain_exactly(resource_2.guid)
+      end
+
+      it 'filters by running state' do
+        get "/v3/apps?current_state=RUNNING", nil, admin_header
+
+        expect(last_response).to have_status_code(200)
+        expect(parsed_response['resources'].map { |r| r['guid'] }).to contain_exactly(resource_1.guid, resource_3.guid)
+      end
+
+      it 'filters by stopped state' do
+        get "/v3/apps?current_state=STOPPED", nil, admin_header
+
+        expect(last_response).to have_status_code(200)
+        expect(parsed_response['resources'].map { |r| r['guid'] }).to contain_exactly(resource_4.guid)
+      end
+
+    end
+
     context 'faceted search' do
       let(:admin_header) { headers_for(user, scopes: %w(cloud_controller.admin)) }
 

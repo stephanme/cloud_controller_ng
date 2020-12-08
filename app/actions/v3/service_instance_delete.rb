@@ -139,6 +139,13 @@ module VCAP::CloudController
           errors << e
         end
 
+        service_key_action = ServiceCredentialBindingDelete.new(:key, service_event_repository.user_audit_info)
+        service_instance.service_keys.each do |service_key|
+          service_key_action.delete(service_key)
+        rescue => e
+          errors << e
+        end
+
         return errors
       end
 

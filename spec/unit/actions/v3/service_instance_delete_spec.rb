@@ -91,6 +91,11 @@ module VCAP::CloudController
                 allow(d).to receive(:delete), &:destroy
               end
             end
+            let(:delete_service_key_action) do
+              double(ServiceCredentialBindingDelete).tap do |d|
+                allow(d).to receive(:delete), &:destroy
+              end
+            end
 
             let!(:route_binding_1) { RouteBinding.make(service_instance: service_instance) }
             let!(:route_binding_2) { RouteBinding.make(service_instance: service_instance) }
@@ -98,10 +103,13 @@ module VCAP::CloudController
             let!(:service_binding_1) { ServiceBinding.make(service_instance: service_instance) }
             let!(:service_binding_2) { ServiceBinding.make(service_instance: service_instance) }
             let!(:service_binding_3) { ServiceBinding.make(service_instance: service_instance) }
+            let!(:service_key_1) { ServiceKey.make(service_instance: service_instance) }
+            let!(:service_key_2) { ServiceKey.make(service_instance: service_instance) }
+            let!(:service_key_3) { ServiceKey.make(service_instance: service_instance) }
 
             before do
               allow(ServiceRouteBindingDelete).to receive(:new).and_return(delete_route_binding_action)
-              allow(ServiceCredentialBindingDelete).to receive(:new).and_return(delete_service_binding_action)
+              allow(ServiceCredentialBindingDelete).to receive(:new) { |type, _| type == :credential ? delete_service_binding_action : delete_service_key_action }
             end
 
             it 'unbinds all the bindings' do
@@ -116,6 +124,11 @@ module VCAP::CloudController
               expect(delete_service_binding_action).to have_received(:delete).with(service_binding_1)
               expect(delete_service_binding_action).to have_received(:delete).with(service_binding_2)
               expect(delete_service_binding_action).to have_received(:delete).with(service_binding_3)
+
+              expect(ServiceCredentialBindingDelete).to have_received(:new).with(:key, event_repository.user_audit_info)
+              expect(delete_service_key_action).to have_received(:delete).with(service_key_1)
+              expect(delete_service_key_action).to have_received(:delete).with(service_key_2)
+              expect(delete_service_key_action).to have_received(:delete).with(service_key_3)
             end
 
             context 'when deleting bindings raises' do
@@ -139,6 +152,16 @@ module VCAP::CloudController
                 end
               end
 
+              let(:delete_service_key_action) do
+                double(ServiceCredentialBindingDelete).tap do |d|
+                  allow(d).to receive(:delete) do |binding|
+                    raise StandardError.new('boom-key') if binding == service_key_2
+
+                    binding.destroy
+                  end
+                end
+              end
+
               it 'attempts to remove other route bindings' do
                 expect {
                   action.delete
@@ -147,6 +170,7 @@ module VCAP::CloudController
                 expect(ServiceInstance.all).to contain_exactly(service_instance)
                 expect(RouteBinding.all).to contain_exactly(route_binding_2)
                 expect(ServiceBinding.all).to contain_exactly(service_binding_2)
+                expect(ServiceKey.all).to contain_exactly(service_key_2)
               end
             end
           end
